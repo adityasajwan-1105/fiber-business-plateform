@@ -35,6 +35,10 @@ async function startServer() {
   );
   app.use(express.json());
 
+  app.get("/", (_req, res) => {
+    res.json({ message: "API is running. Access endpoints via /api" });
+  });
+
   app.use("/api", routes);
 
   app.use(

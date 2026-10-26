@@ -16,10 +16,19 @@ export default function Home() {
   const [products, setProducts] = useState<Product[]>([]);
 
   useEffect(() => {
-    window.setTimeout(() => {
+    const refreshData = () => {
       setContent(getLandingContent());
       setProducts(getAdminProducts());
-    }, 0);
+    };
+
+    refreshData();
+    window.addEventListener("storage", refreshData);
+    window.addEventListener("focus", refreshData);
+
+    return () => {
+      window.removeEventListener("storage", refreshData);
+      window.removeEventListener("focus", refreshData);
+    };
   }, []);
 
   return (

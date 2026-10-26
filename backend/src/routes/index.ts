@@ -1,5 +1,6 @@
 import { Router } from "express";
 import authRoutes from "./auth.js";
+import imageRoutes from "./images.js";
 
 const router = Router();
 
@@ -8,5 +9,6 @@ router.get("/health", (_req, res) => {
 });
 
 router.use("/auth", authRoutes);
+router.use("/images", imageRoutes);
 
 export default router;
