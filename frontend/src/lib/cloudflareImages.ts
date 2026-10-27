@@ -1,6 +1,4 @@
-import { getToken } from "@/lib/auth";
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
+import { getApiUrl, getToken } from "@/lib/auth";
 const DELIVERY_BASE_URL =
   process.env.NEXT_PUBLIC_CLOUDFLARE_IMAGES_DELIVERY_BASE_URL?.replace(
     /\/+$/,
@@ -40,7 +38,7 @@ export async function uploadImageToCloudflare(image: Blob): Promise<string> {
   const token = getToken();
   if (!token) throw new Error("Sign in as an admin before uploading images.");
 
-  const urlResponse = await fetch(`${API_URL}/images/direct-upload`, {
+  const urlResponse = await fetch(`${getApiUrl()}/images/direct-upload`, {
     method: "POST",
     headers: { Authorization: `Bearer ${token}` },
   });

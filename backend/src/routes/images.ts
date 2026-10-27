@@ -1,7 +1,14 @@
 import { Router } from "express";
+import multer from "multer";
 import { requireAdmin, requireAuth } from "../middleware/auth.js";
+import { StoredImage } from "../models/StoredImage.js";
+import { persistImageValue, publicApiBase } from "../utils/persistMedia.js";
 
 const router = Router();
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 8 * 1024 * 1024 },
+});
 
 type CloudflareDirectUploadResponse = {
   success?: boolean;
@@ -58,8 +65,7 @@ router.post("/direct-upload", requireAuth, requireAdmin, async (_req, res) => {
         body: formData,
       }
     );
-    const data =
-      (await response.json()) as CloudflareDirectUploadResponse;
+    const data = (await response.json()) as CloudflareDirectUploadResponse;
 
     if (
       !response.ok ||
@@ -87,6 +93,53 @@ router.post("/direct-upload", requireAuth, requireAdmin, async (_req, res) => {
     res.status(502).json({
       error: "Could not connect to Cloudflare Images.",
     });
+  }
+});
+
+router.post(
+  "/upload",
+  requireAuth,
+  requireAdmin,
+  upload.single("file"),
+  async (req, res) => {
+    try {
+      const file = req.file;
+      if (!file?.buffer?.length) {
+        res.status(400).json({ error: "An image file is required." });
+        return;
+      }
+
+      const contentType = file.mimetype?.startsWith("image/")
+        ? file.mimetype
+        : "image/webp";
+      const image = await StoredImage.create({
+        contentType,
+        data: file.buffer,
+      });
+
+      res.status(201).json({
+        url: `${publicApiBase(req)}/api/images/${image._id.toString()}`,
+      });
+    } catch (error) {
+      console.error("Could not store uploaded image.", error);
+      res.status(500).json({ error: "Could not store the uploaded image." });
+    }
+  }
+);
+
+router.get("/:id", async (req, res) => {
+  try {
+    const image = await StoredImage.findById(req.params.id);
+    if (!image) {
+      res.status(404).json({ error: "Image not found" });
+      return;
+    }
+
+    res.setHeader("Content-Type", image.contentType || "image/webp");
+    res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+    res.send(image.data);
+  } catch {
+    res.status(404).json({ error: "Image not found" });
   }
 });
 

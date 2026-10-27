@@ -109,56 +109,5 @@ export const defaultLandingContent: LandingContent = {
 };
 
 export function getLandingContent(): LandingContent {
-  if (typeof window === "undefined") return defaultLandingContent;
-
-  try {
-    const saved = window.localStorage.getItem("madeye-landing-content");
-    if (!saved) return defaultLandingContent;
-
-    const parsed = JSON.parse(saved);
-    let heroImages = parsed.heroImages;
-    if (!Array.isArray(heroImages) || heroImages.length === 0) {
-      if (parsed.heroImageUrl) {
-        heroImages = [parsed.heroImageUrl, "/hero-2.jpg", "/hero-3.jpg", "/hero-4.jpg"];
-      } else {
-        heroImages = defaultLandingContent.heroImages;
-      }
-    }
-
-    const showCollectionsSection =
-      parsed.showCollectionsSection !== undefined
-        ? Boolean(parsed.showCollectionsSection)
-        : true;
-
-    const collectionCategories = Array.isArray(parsed.collectionCategories)
-      ? parsed.collectionCategories
-      : defaultCollectionCategories;
-
-    const showAboutSection =
-      parsed.showAboutSection !== undefined
-        ? Boolean(parsed.showAboutSection)
-        : true;
-
-    const aboutLayout = parsed.aboutLayout === "single" ? "single" : "collage";
-
-    const aboutCollage =
-      Array.isArray(parsed.aboutCollage) && parsed.aboutCollage.length === 4
-        ? parsed.aboutCollage
-        : defaultAboutCollage;
-
-    return {
-      ...defaultLandingContent,
-      ...parsed,
-      showCollectionsSection,
-      collectionCategories,
-      showAboutSection,
-      aboutLayout,
-      aboutCollage,
-      heroImages,
-      heroImageUrl: parsed.heroImageUrl || heroImages[0] || defaultLandingContent.heroImageUrl,
-      heroRotationInterval: parsed.heroRotationInterval || defaultLandingContent.heroRotationInterval,
-    };
-  } catch {
-    return defaultLandingContent;
-  }
+  return defaultLandingContent;
 }

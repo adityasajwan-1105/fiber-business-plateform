@@ -113,12 +113,5 @@ export const products: Product[] = [
 ];
 
 export function getAdminProducts(): Product[] {
-  if (typeof window === "undefined") return [];
-
-  try {
-    const saved = window.localStorage.getItem("madeye-products");
-    return saved ? (JSON.parse(saved) as Product[]) : [];
-  } catch {
-    return [];
-  }
+  return [];
 }

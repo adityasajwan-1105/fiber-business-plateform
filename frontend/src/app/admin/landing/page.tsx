@@ -8,19 +8,25 @@ import { Footer } from "@/components/Footer";
 import { Header } from "@/components/Header";
 import {
   defaultLandingContent,
-  getLandingContent,
   type LandingContent,
   type CollectionCategory,
   defaultCollectionCategories,
   type AboutCollageItem,
   defaultAboutCollage,
 } from "@/lib/landingContent";
+import {
+  fetchPublicLandingContent,
+  updateAdminLandingContent,
+} from "@/lib/api";
+import { uploadAdminImage } from "@/lib/uploadImage";
 
 export default function LandingEditorPage() {
   const { user, loading } = useAuth();
   const router = useRouter();
   const [content, setContent] = useState<LandingContent>(defaultLandingContent);
   const [saved, setSaved] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveError, setSaveError] = useState("");
   const [savedSection, setSavedSection] = useState<string | null>(null);
   const [imageNote, setImageNote] = useState<{
     field: "heroImageUrl" | "aboutImageUrl";
@@ -37,9 +43,12 @@ export default function LandingEditorPage() {
       router.replace("/profile");
       return;
     }
-    window.setTimeout(() => {
-      setContent(getLandingContent());
-    }, 0);
+
+    async function load() {
+      const serverContent = await fetchPublicLandingContent();
+      setContent(serverContent);
+    }
+    load();
   }, [loading, user, router]);
 
   function updateField(field: keyof LandingContent, value: string) {
@@ -106,39 +115,40 @@ export default function LandingEditorPage() {
 
   async function onAddHeroLocalImage(file: File) {
     try {
-      const image = await compressImage(file);
-      const expectedRatio = 1;
-      const imageRatio = image.width / image.height;
-      if (Math.abs(imageRatio - expectedRatio) > 0.15) {
-        setImageNote({
-          field: "heroImageUrl",
-          message: "Hero images look best as a square (1:1 ratio). This image will fit with auto-crop.",
-        });
-      } else {
-        setImageNote(null);
-      }
+      const imageUrl = await uploadAdminImage(file);
       const existing = (content.heroImages && content.heroImages.length > 0)
         ? content.heroImages
         : [content.heroImageUrl || "/hero.png"];
-      updateHeroImages([...existing, image.dataUrl]);
-    } catch {
+      updateHeroImages([...existing, imageUrl]);
+      setImageNote(null);
+    } catch (err) {
       setSaved(false);
       setImageNote({
         field: "heroImageUrl",
-        message: "Could not read that image. Please choose a PNG, JPG, or WebP file.",
+        message: err instanceof Error ? err.message : "Could not upload that image.",
       });
     }
   }
 
-  function saveCurrentContent(sectionIdentifier?: string) {
-    localStorage.setItem("madeye-landing-content", JSON.stringify(content));
-    window.dispatchEvent(new Event("storage"));
-    setSaved(true);
-    if (sectionIdentifier) {
-      setSavedSection(sectionIdentifier);
-      setTimeout(() => {
-        setSavedSection((curr) => (curr === sectionIdentifier ? null : curr));
-      }, 4000);
+  async function saveCurrentContent(sectionIdentifier?: string) {
+    setIsSaving(true);
+    setSaveError("");
+    try {
+      const updated = await updateAdminLandingContent(content);
+      setContent(updated);
+      window.dispatchEvent(new Event("madeye-content-updated"));
+      setSaved(true);
+      if (sectionIdentifier) {
+        setSavedSection(sectionIdentifier);
+        setTimeout(() => {
+          setSavedSection((curr) => (curr === sectionIdentifier ? null : curr));
+        }, 4000);
+      }
+    } catch (err: any) {
+      setSaveError(err?.message || "Failed to save to database.");
+      setSaved(false);
+    } finally {
+      setIsSaving(false);
     }
   }
 
@@ -147,12 +157,20 @@ export default function LandingEditorPage() {
     saveCurrentContent("all");
   }
 
-  function resetContent() {
-    setContent(defaultLandingContent);
-    localStorage.removeItem("madeye-landing-content");
-    window.dispatchEvent(new Event("storage"));
-    setImageNote(null);
-    setSaved(true);
+  async function resetContent() {
+    setIsSaving(true);
+    setSaveError("");
+    try {
+      const updated = await updateAdminLandingContent(defaultLandingContent);
+      setContent(updated);
+      window.dispatchEvent(new Event("madeye-content-updated"));
+      setImageNote(null);
+      setSaved(true);
+    } catch (err: any) {
+      setSaveError(err?.message || "Failed to reset content.");
+    } finally {
+      setIsSaving(false);
+    }
   }
 
   async function onImageSelected(
@@ -163,25 +181,14 @@ export default function LandingEditorPage() {
     if (!file) return;
 
     try {
-      const image = await compressImage(file);
-      const expectedRatio = field === "heroImageUrl" ? 1 : 1.5;
-      const imageRatio = image.width / image.height;
-      if (Math.abs(imageRatio - expectedRatio) > 0.15) {
-        setImageNote({
-          field,
-          message: field === "heroImageUrl"
-            ? "Hero images work best as a square (1200 x 1200 px). This image will still fit safely."
-            : "About images work best in a 3:2 landscape ratio (1200 x 800 px). This image will still fit safely.",
-        });
-      } else {
-        setImageNote(null);
-      }
-      updateField(field, image.dataUrl);
-    } catch {
+      const imageUrl = await uploadAdminImage(file);
+      updateField(field, imageUrl);
+      setImageNote(null);
+    } catch (err) {
       setSaved(false);
       setImageNote({
         field,
-        message: "Could not read that image. Please choose a PNG, JPG, or WebP file.",
+        message: err instanceof Error ? err.message : "Could not upload that image.",
       });
     }
   }
@@ -400,37 +407,11 @@ function EditorImageField({
         Choose local image
         <input type="file" accept="image/*" onChange={onFileChange} className="sr-only" />
       </label>
-      {value.startsWith("data:") ? (
-        <span className="ml-3 text-xs text-sage-deep">Stored locally</span>
+      {value && !value.startsWith("data:") ? (
+        <span className="ml-3 text-xs text-sage-deep">Saved for every visitor</span>
       ) : null}
     </div>
   );
-}
-
-function compressImage(file: File): Promise<{ dataUrl: string; width: number; height: number }> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onerror = () => reject(new Error("Could not read image"));
-    reader.onload = () => {
-      const image = new Image();
-      image.onerror = () => reject(new Error("Could not load image"));
-      image.onload = () => {
-        const maxDimension = 1600;
-        const scale = Math.min(1, maxDimension / Math.max(image.width, image.height));
-        const canvas = document.createElement("canvas");
-        canvas.width = Math.max(1, Math.round(image.width * scale));
-        canvas.height = Math.max(1, Math.round(image.height * scale));
-        canvas.getContext("2d")?.drawImage(image, 0, 0, canvas.width, canvas.height);
-        resolve({
-          dataUrl: canvas.toDataURL("image/webp", 0.8),
-          width: canvas.width,
-          height: canvas.height,
-        });
-      };
-      image.src = String(reader.result);
-    };
-    reader.readAsDataURL(file);
-  });
 }
 
 function HeroImagesManager({
@@ -568,7 +549,7 @@ function HeroImagesManager({
 
               <div className="min-w-0 flex-1">
                 <p className="truncate text-xs font-medium text-olive">
-                  {imgUrl.startsWith("data:") ? "Custom uploaded image (data URL)" : imgUrl}
+                  {imgUrl.startsWith("data:") ? "Unsaved local image — save to publish" : imgUrl}
                 </p>
                 <p className="text-[11px] text-olive-muted">
                   {idx === 0 ? "First slide (Hero cover)" : `Slide position #${idx + 1}`}
@@ -1162,10 +1143,10 @@ function AboutSectionManager({
 
   const handleUploadSlotImage = async (index: number, file: File) => {
     try {
-      const compressed = await compressImage(file);
-      handleUpdateSlot(index, { imageUrl: compressed.dataUrl });
-    } catch {
-      alert("Could not load image. Please select a PNG, JPG, or WebP file.");
+      const imageUrl = await uploadAdminImage(file);
+      handleUpdateSlot(index, { imageUrl });
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Could not upload that image.");
     }
   };
 

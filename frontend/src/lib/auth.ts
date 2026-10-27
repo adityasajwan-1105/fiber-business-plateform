@@ -7,7 +7,27 @@ export type AuthUser = {
   role: UserRole;
 };
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
+export function getApiUrl() {
+  const configured = process.env.NEXT_PUBLIC_API_URL?.replace(/\/+$/, "");
+  if (typeof window !== "undefined") {
+    const host = window.location.hostname;
+    const configuredIsLocal =
+      configured && /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?(?:\/|$)/i.test(configured);
+
+    if (configured && (!configuredIsLocal || host === "localhost" || host === "127.0.0.1")) {
+      return configured;
+    }
+
+    if (host !== "localhost" && host !== "127.0.0.1") {
+      return `${window.location.origin}/api`;
+    }
+  }
+
+  if (configured) return configured;
+  return "http://localhost:5000/api";
+}
+
+export const API_URL = getApiUrl();
 const TOKEN_KEY = "madeye-token";
 
 export function getToken(): string | null {
@@ -27,7 +47,7 @@ export function profilePath(role: UserRole) {
   return role === "admin" ? "/admin" : "/profile";
 }
 
-async function request<T>(
+export async function request<T>(
   path: string,
   options: RequestInit = {}
 ): Promise<T> {
@@ -38,7 +58,11 @@ async function request<T>(
     headers.set("Authorization", `Bearer ${token}`);
   }
 
-  const res = await fetch(`${API_URL}${path}`, { ...options, headers });
+  const res = await fetch(`${getApiUrl()}${path}`, {
+    ...options,
+    cache: options.cache ?? "no-store",
+    headers,
+  });
   const data = (await res.json().catch(() => ({}))) as T & { error?: string };
 
   if (!res.ok) {

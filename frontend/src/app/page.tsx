@@ -8,25 +8,51 @@ import { Header } from "@/components/Header";
 import { Hero } from "@/components/Hero";
 import { ProductShowcase } from "@/components/ProductShowcase";
 import { Support } from "@/components/Support";
-import { getAdminProducts, type Product } from "@/data/products";
-import { defaultLandingContent, getLandingContent, type LandingContent } from "@/lib/landingContent";
+import { fetchPublicLandingContent, fetchPublicProducts } from "@/lib/api";
+import { defaultLandingContent, type LandingContent } from "@/lib/landingContent";
+import type { Product } from "@/data/products";
 
 export default function Home() {
   const [content, setContent] = useState<LandingContent>(defaultLandingContent);
   const [products, setProducts] = useState<Product[]>([]);
 
   useEffect(() => {
+    let isMounted = true;
+
+    async function loadData() {
+      try {
+        const [fetchedContent, fetchedProducts] = await Promise.all([
+          fetchPublicLandingContent(),
+          fetchPublicProducts(),
+        ]);
+        if (isMounted) {
+          setContent(fetchedContent);
+          setProducts(fetchedProducts);
+        }
+      } catch (error) {
+        console.error("Could not load published content:", error);
+      }
+    }
+
+    loadData();
+
     const refreshData = () => {
-      setContent(getLandingContent());
-      setProducts(getAdminProducts());
+      loadData();
     };
 
-    refreshData();
-    window.addEventListener("storage", refreshData);
+    const refreshInterval = window.setInterval(() => {
+      if (document.visibilityState === "visible") {
+        loadData();
+      }
+    }, 30_000);
+
+    window.addEventListener("madeye-content-updated", refreshData);
     window.addEventListener("focus", refreshData);
 
     return () => {
-      window.removeEventListener("storage", refreshData);
+      isMounted = false;
+      window.clearInterval(refreshInterval);
+      window.removeEventListener("madeye-content-updated", refreshData);
       window.removeEventListener("focus", refreshData);
     };
   }, []);

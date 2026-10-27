@@ -5,13 +5,14 @@ import { useEffect, useState } from "react";
 import { About } from "@/components/About";
 import { Footer } from "@/components/Footer";
 import { Header } from "@/components/Header";
-import { defaultLandingContent, getLandingContent, type LandingContent } from "@/lib/landingContent";
+import { fetchPublicLandingContent } from "@/lib/api";
+import { defaultLandingContent, type LandingContent } from "@/lib/landingContent";
 
 export default function AboutPage() {
   const [content, setContent] = useState<LandingContent>(defaultLandingContent);
 
   useEffect(() => {
-    window.setTimeout(() => setContent(getLandingContent()), 0);
+    fetchPublicLandingContent().then(setContent).catch(() => setContent(defaultLandingContent));
   }, []);
 
   return (
